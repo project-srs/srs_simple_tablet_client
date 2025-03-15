@@ -39,18 +39,18 @@ class _ExecutePage extends State<ExecutePage> {
 
   @override
   Widget build(BuildContext context) {
-    createListItem(endpoint, name){
+    createDrawerListItem(goal_id, key, display_name){
       return ListTile(
-        title: Text(name),
+        title: Text(display_name),
         onTap: () async {
           final response = await http.post(
-              Uri.http('${widget.hostname}:8010', endpoint),
+              Uri.http('${widget.hostname}:8010', '/select/drawer'),
               headers: <String, String>{
                 'Content-Type': 'application/json; charset=UTF-8',
               },
               body: jsonEncode(<String, String>{
-                'name': name,
-                'comment': "${name} by app"
+                'goal_id': goal_id,
+                'key': key
               }));
           print("response: " + response.body);
           Navigator.of(context).pop();
@@ -58,19 +58,21 @@ class _ExecutePage extends State<ExecutePage> {
       );
     }
 
-    createOptionItem(name, endpoint, post_content){
+    createActionOptionItem(goal_id, key, display_name){
       return SimpleDialogOption(
-        child: Text(name),
+        child: Text(display_name),
         onPressed: () async {
           final response = await http.post(
-            Uri.http('${widget.hostname}:8010', endpoint),
+            Uri.http('${widget.hostname}:8010', '/select/action'),
             headers: <String, String>{
               'Content-Type': 'application/json; charset=UTF-8',
             },
-            body: post_content
-          );
+            body: jsonEncode(<String, String>{
+              'goal_id': goal_id,
+              'key': key
+            }));
           print("response: " + response.body);
-          Navigator.pop(context, post_content);
+          Navigator.pop(context);
         },
       );
     }
@@ -87,9 +89,40 @@ class _ExecutePage extends State<ExecutePage> {
         List<Widget> modeWidgets = [];
 
         if (snapshot.connectionState == ConnectionState.active && snapshot.hasData) {
-          // mode
           var jsonData = jsonDecode(snapshot.data);
-          modeText = jsonData['mode_name'];
+
+          // select.drawer
+          modeWidgets.add(const DrawerHeader(
+            child: Text("Operation Mode")
+          ));
+          for (var item in jsonData["select"]["drawer"]["options"]){
+            modeWidgets.add(createDrawerListItem(item["goal_id"], item["key"], item["display_name"]));
+          }
+
+          // select.action
+          if (0 < jsonData["select"]["action"]["options"].length) {
+            List<Widget> optionList = [];
+            for (var item in jsonData["select"]["action"]["options"]) {
+              optionList.add(createActionOptionItem(item["goal_id"], item["key"], item["display_name"]));
+            }
+
+            actionButtonWidget = FloatingActionButton(
+              onPressed: () async {
+                final String? selectedText = await showDialog<String>(
+                  context: context,
+                  builder: (_) {
+                    return SimpleDialogSample(optionList: optionList,);
+                  }
+                );
+                print(selectedText);
+              },
+              backgroundColor: Colors.white,
+              child: const Icon(Icons.navigation),
+            );
+          }
+
+          // display.header
+          modeText = jsonData['display']['header']['name'];
           final Map<String, Color> modeColorMap = {
             'red' : Colors.red,
             'green' : Colors.green,
@@ -97,11 +130,25 @@ class _ExecutePage extends State<ExecutePage> {
             'yellow' : Colors.yellow,
             'gray' : Colors.white54
           };
-          if (modeColorMap.containsKey(jsonData['mode_color'])) {
-            modeColor = modeColorMap[jsonData['mode_color']]!;
+          if (modeColorMap.containsKey(jsonData['display']['header']['color'])) {
+            modeColor = modeColorMap[jsonData['display']['header']['color']]!;
           }
+          // display.board
+          final Map<String, String> iconImageMap = {
+            'error' : "images/326633_error_icon.png",
+            'move' : "images/9057017_play_button_o_icon.png",
+            'pause' : "images/3671827_outline_pause_icon.png",
+            'turn' : "images/6428070_arrow_recycle_refresh_reload_return_icon.png",
+            'manual' : "images/9025635_game_controller_icon.png",
+            'wait_input' : "images/9165539_tap_touch_icon.png",
+          };
+          if (iconImageMap.containsKey(jsonData["display"]["board"]['icon'])) {
+            boardIconFileName = iconImageMap[jsonData["display"]["board"]['icon']]!;
+          }
+          boardText = jsonData["display"]["board"]["message"];
+
           // notes
-          for (var jsonItem in jsonData['notes']){
+          for (var jsonItem in jsonData['note']['contents']){
             var noteColor = Colors.white38;
             final Map<String, Color> noteColorMap = {
               'info' : Colors.white,
@@ -116,48 +163,6 @@ class _ExecutePage extends State<ExecutePage> {
                 jsonItem["message"],
                 style: TextStyle(fontSize: 30, color:noteColor),
               )
-            );
-          }
-          // board
-          final Map<String, String> iconImageMap = {
-            'error' : "images/326633_error_icon.png",
-            'move' : "images/9057017_play_button_o_icon.png",
-            'pause' : "images/3671827_outline_pause_icon.png",
-            'turn' : "images/6428070_arrow_recycle_refresh_reload_return_icon.png",
-            'manual' : "images/9025635_game_controller_icon.png",
-            'wait_input' : "images/9165539_tap_touch_icon.png",
-          };
-          if (iconImageMap.containsKey(jsonData['board_icon'])) {
-            boardIconFileName = iconImageMap[jsonData['board_icon']]!;
-          }
-          boardText = jsonData["board_message"];
-          // mode_list
-          modeWidgets.add(const DrawerHeader(
-            child: Text("Operation Mode")
-          ));
-          for (var jsonItem in jsonData['modes']){
-            modeWidgets.add(createListItem(jsonItem["endpoint"], jsonItem["name"]));
-          }
-          // action
-          if (0 < jsonData["actions"].length) {
-            List<Widget> optionList = [];
-            for (var item in jsonData["actions"]) {
-              optionList.add(createOptionItem(item["name"], item["endpoint"], item["post_content"]));
-            }
-
-            actionButtonWidget = FloatingActionButton(
-              onPressed: () async {
-                // Add your onPressed code here!
-                final String? selectedText = await showDialog<String>(
-                  context: context,
-                  builder: (_) {
-                    return SimpleDialogSample(optionList: optionList,);
-                  }
-                );
-                print(selectedText);
-              },
-              backgroundColor: Colors.white,
-              child: const Icon(Icons.navigation),
             );
           }
         }
